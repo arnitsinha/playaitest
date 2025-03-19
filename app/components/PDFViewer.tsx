@@ -20,57 +20,57 @@ interface PDFViewerProps {
 
 // List of available voices for text-to-speech (TTS)
 const voices = [
-    {
-      name: 'Angelo',
-      accent: 'american',
-      language: 'English (US)',
-      languageCode: 'EN-US',
-      value: 's3://voice-cloning-zero-shot/baf1ef41-36b6-428c-9bdf-50ba54682bd8/original/manifest.json',
-      sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Angelo_Sample.wav',
-      gender: 'male',
-      style: 'Conversational',
-    },
-    {
-      name: 'Deedee',
-      accent: 'american',
-      language: 'English (US)',
-      languageCode: 'EN-US',
-      value: 's3://voice-cloning-zero-shot/e040bd1b-f190-4bdb-83f0-75ef85b18f84/original/manifest.json',
-      sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Deedee_Sample.wav',
-      gender: 'female',
-      style: 'Conversational',
-    },
-    {
-      name: 'Jennifer',
-      accent: 'american',
-      language: 'English (US)',
-      languageCode: 'EN-US',
-      value: 's3://voice-cloning-zero-shot/801a663f-efd0-4254-98d0-5c175514c3e8/jennifer/manifest.json',
-      sample: 'https://peregrine-samples.s3.amazonaws.com/parrot-samples/jennifer.wav',
-      gender: 'female',
-      style: 'Conversational',
-    },
-    {
-      name: 'Briggs',
-      accent: 'american',
-      language: 'English (US)',
-      languageCode: 'EN-US',
-      value: 's3://voice-cloning-zero-shot/71cdb799-1e03-41c6-8a05-f7cd55134b0b/original/manifest.json',
-      sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Briggs_Sample.wav',
-      gender: 'male',
-      style: 'Narrative',
-    },
-    {
-      name: 'Samara',
-      accent: 'american',
-      language: 'English (US)',
-      languageCode: 'EN-US',
-      value: 's3://voice-cloning-zero-shot/90217770-a480-4a91-b1ea-df00f4d4c29d/original/manifest.json',
-      sample: 'https://parrot-samples.s3.amazonaws.com/gargamel/Samara.wav',
-      gender: 'female',
-      style: 'Conversational',
-    }
-  ];
+  {
+    name: 'Angelo',
+    accent: 'american',
+    language: 'English (US)',
+    languageCode: 'EN-US',
+    value: 's3://voice-cloning-zero-shot/baf1ef41-36b6-428c-9bdf-50ba54682bd8/original/manifest.json',
+    sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Angelo_Sample.wav',
+    gender: 'male',
+    style: 'Conversational',
+  },
+  {
+    name: 'Deedee',
+    accent: 'american',
+    language: 'English (US)',
+    languageCode: 'EN-US',
+    value: 's3://voice-cloning-zero-shot/e040bd1b-f190-4bdb-83f0-75ef85b18f84/original/manifest.json',
+    sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Deedee_Sample.wav',
+    gender: 'female',
+    style: 'Conversational',
+  },
+  {
+    name: 'Jennifer',
+    accent: 'american',
+    language: 'English (US)',
+    languageCode: 'EN-US',
+    value: 's3://voice-cloning-zero-shot/801a663f-efd0-4254-98d0-5c175514c3e8/jennifer/manifest.json',
+    sample: 'https://peregrine-samples.s3.amazonaws.com/parrot-samples/jennifer.wav',
+    gender: 'female',
+    style: 'Conversational',
+  },
+  {
+    name: 'Briggs',
+    accent: 'american',
+    language: 'English (US)',
+    languageCode: 'EN-US',
+    value: 's3://voice-cloning-zero-shot/71cdb799-1e03-41c6-8a05-f7cd55134b0b/original/manifest.json',
+    sample: 'https://peregrine-samples.s3.us-east-1.amazonaws.com/parrot-samples/Briggs_Sample.wav',
+    gender: 'male',
+    style: 'Narrative',
+  },
+  {
+    name: 'Samara',
+    accent: 'american',
+    language: 'English (US)',
+    languageCode: 'EN-US',
+    value: 's3://voice-cloning-zero-shot/90217770-a480-4a91-b1ea-df00f4d4c29d/original/manifest.json',
+    sample: 'https://parrot-samples.s3.amazonaws.com/gargamel/Samara.wav',
+    gender: 'female',
+    style: 'Conversational',
+  }
+];
 
 // Main PDFViewer component
 const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -92,12 +92,296 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const [temperature, setTemperature] = useState(1); // Temperature for TTS generation
   const [progress, setProgress] = useState<number | null>(null); // Progress of audio generation
   const audioRef = useRef<HTMLAudioElement>(null); // Ref for the audio element
-  const audioCache = useRef<Record<number, string>>({}); // Cache for generated audio URLs
+  const audioCache = useRef<Record<number, Record<string, string>>>({}); // Cache for generated audio URLs (nested by page and settings)
   const [pageWidth, setPageWidth] = useState<number | null>(null); // Width of the PDF page
   const [pageHeight, setPageHeight] = useState<number | null>(null); // Height of the PDF page
   const [fitMode, setFitMode] = useState<'width' | 'height' | 'both' | 'none'>('both'); // Fit mode for PDF scaling
   const controlsContainerRef = useRef<HTMLDivElement | null>(null); // Ref for the audio controls container
   const [settingsChanged, setSettingsChanged] = useState(false); // Whether TTS settings have changed
+  const [pageSettings, setPageSettings] = useState<Record<number, { voice: string; speed: number; temperature: number }>>({}); // Settings per page
+
+  // Generate a unique key for the current settings
+  const getSettingsKey = useCallback(() => {
+    return `${selectedVoice}-${speed}-${temperature}`;
+  }, [selectedVoice, speed, temperature]);
+
+  // Effect to restore settings when the page changes
+  useEffect(() => {
+    if (pageSettings[pageNumber]) {
+      const { voice, speed, temperature } = pageSettings[pageNumber];
+      setSelectedVoice(voice);
+      setSpeed(speed);
+      setTemperature(temperature);
+    }
+  }, [pageNumber, pageSettings]);
+
+  // Effect to handle page change and audio caching
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+
+    // Check if audio is cached for the current page and settings
+    const settingsKey = getSettingsKey();
+    if (audioCache.current[pageNumber]?.[settingsKey]) {
+      setAudioSrc(audioCache.current[pageNumber][settingsKey]);
+      setSettingsChanged(false);
+    } else {
+      setAudioSrc(null); // Reset audio source if no cached audio exists
+      setSettingsChanged(true);
+    }
+  }, [pageNumber, getSettingsKey]);
+
+  // Effect to preload adjacent pages for faster navigation
+  useEffect(() => {
+    if (numPages) {
+      const adjacentPages = [];
+      if (pageNumber + 1 <= numPages) adjacentPages.push(pageNumber + 1);
+      if (pageNumber - 1 >= 1) adjacentPages.push(pageNumber - 1);
+      setPagesToPreload(adjacentPages);
+    }
+  }, [pageNumber, numPages]);
+
+  // Effect to reset audio when voice, temperature, or speed changes
+  useEffect(() => {
+    if (audioSrc) {
+      setAudioSrc(null); // Reset audio source
+      setIsPlaying(false); // Stop playing
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      setSettingsChanged(true);
+    }
+  }, [selectedVoice, temperature, speed]);
+
+  // Effect to fit PDF to container width and/or height based on fitMode
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pageWidth || !pageHeight) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        
+        // Subtract padding (8px on each side = 16px total)
+        const availableWidth = width - 16;
+        const availableHeight = height - 16;
+
+        let newScale: number;
+        
+        switch (fitMode) {
+          case 'width':
+            newScale = availableWidth / pageWidth;
+            break;
+          case 'height':
+            newScale = availableHeight / pageHeight;
+            break;
+          case 'both':
+            // Use the smaller scale to ensure both dimensions fit
+            const widthScale = availableWidth / pageWidth;
+            const heightScale = availableHeight / pageHeight;
+            newScale = Math.min(widthScale, heightScale);
+            break;
+          case 'none':
+            // Keep current scale
+            return;
+          default:
+            newScale = scale;
+        }
+        
+        setScale(newScale);
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.unobserve(container);
+    };
+  }, [pageWidth, pageHeight, fitMode, scale]);
+
+  // Function to extract text from a PDF page
+  const extractTextFromPage = async (pageNum: number) => {
+    const pdf = await pdfjs.getDocument(URL.createObjectURL(file)).promise;
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = textContent.items.filter((item: any) => item.str).map((item: any) => item.str).join(' ');
+    return text;
+  };
+
+  // Function to fetch audio for a specific page
+  const fetchAudioForPage = async (pageNum: number) => {
+    const settingsKey = getSettingsKey();
+
+    // Check if audio is already cached for the current page and settings
+    if (audioCache.current[pageNumber]?.[settingsKey]) {
+      setAudioSrc(audioCache.current[pageNumber][settingsKey]);
+      return audioCache.current[pageNumber][settingsKey];
+    }
+  
+    try {
+      setIsAudioLoading(true);
+      setProgress(0); // Reset progress to 0%
+  
+      const text = await extractTextFromPage(pageNum);
+  
+      const options = {
+        method: 'POST',
+        headers: {
+          AUTHORIZATION: process.env.NEXT_PUBLIC_API_AUTHORIZATION || '',
+          'X-USER-ID': process.env.NEXT_PUBLIC_API_USER_ID || '',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          outputFormat: 'mp3',
+          voiceConditioningSeconds: 20,
+          voiceConditioningSeconds2: 20,
+          language: 'english',
+          model: 'PlayDialog',
+          text: text,
+          voice: selectedVoice,
+          speed: speed,
+          temperature: temperature,
+        }),
+      };
+  
+      console.log('Fetching audio for page:', pageNum);
+      console.log('Request options:', options);
+  
+      const response = await fetch('https://api.play.ai/api/v1/tts/stream', options);
+  
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+  
+      if (!response.ok) {
+        throw new Error(`Network response was not ok: ${response.statusText}`);
+      }
+  
+      const contentLength = response.headers.get('content-length');
+      const totalLength = contentLength ? parseInt(contentLength, 10) : null;
+  
+      const reader = response.body?.getReader();
+      let receivedLength = 0;
+      const chunks = [];
+  
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+  
+          if (done) {
+            break;
+          }
+  
+          chunks.push(value);
+          receivedLength += value.length;
+  
+          // Update progress if totalLength is available
+          if (totalLength) {
+            const newProgress = (receivedLength / totalLength) * 100;
+            setProgress(newProgress);
+          } else {
+            // Fallback: Increment progress by a small amount for each chunk
+            setProgress((prev) => Math.min((prev || 0) + 10, 90)); // Cap at 90% until done
+          }
+        }
+      }
+  
+      const audioBlob = new Blob(chunks);
+      const audioUrl = URL.createObjectURL(audioBlob);
+  
+      // Cache the audio for the current page and settings
+      if (!audioCache.current[pageNumber]) {
+        audioCache.current[pageNumber] = {};
+      }
+      audioCache.current[pageNumber][settingsKey] = audioUrl;
+  
+      // Save the current settings for the page
+      setPageSettings(prev => ({
+        ...prev,
+        [pageNumber]: { voice: selectedVoice, speed, temperature },
+      }));
+  
+      setAudioSrc(audioUrl);
+      setProgress(100); // Set progress to 100% when done
+      setSettingsChanged(false); // Reset settings changed flag after successful generation
+      return audioUrl;
+    } catch (error) {
+      console.error('Error generating audio:', error);
+      setProgress(null); // Reset progress on error
+      return null;
+    } finally {
+      setIsAudioLoading(false);
+    }
+  };
+
+  // Function to handle fetching audio for the current page
+  const handleFetchAudio = async () => {
+    const audioUrl = await fetchAudioForPage(pageNumber);
+    if (audioUrl && audioRef.current) {
+      audioRef.current.src = audioUrl;
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Function to handle playing audio
+  const handlePlayAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Function to handle pausing audio
+  const handlePauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  // Function to handle page load success and set page dimensions
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlePageLoadSuccess = (page: any) => {
+    setPageWidth(page.originalWidth);
+    setPageHeight(page.originalHeight);
+  };
+
+  // Function to handle zooming in
+  const handleZoomIn = () => {
+    setFitMode('none');
+    setScale(prev => Math.min(prev + 0.2, 3.0));
+  };
+
+  // Function to handle zooming out
+  const handleZoomOut = () => {
+    setFitMode('none');
+    setScale(prev => Math.max(prev - 0.2, 0.5));
+  };
+
+  // Function to reset zoom to fit the page
+  const handleResetZoom = () => {
+    setFitMode('both');
+  };
+
+  // Effect to handle audio end event
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+
+    const handleAudioEnd = () => {
+      setIsPlaying(false);
+    };
+
+    audioElement.addEventListener('ended', handleAudioEnd);
+
+    return () => {
+      audioElement.removeEventListener('ended', handleAudioEnd);
+    };
+  }, []);
 
   // Function to render audio controls dynamically
   const renderAudioControlsInContainer = useCallback(() => {
@@ -230,264 +514,6 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     };
   }, [renderAudioControlsInContainer]);
 
-  // Effect to reset parameters when a new file is loaded
-  useEffect(() => {
-    onPageChange(1);
-    audioCache.current = {};
-    setAudioSrc(null);
-    setIsPlaying(false);
-    setIsAudioLoading(false);
-    setScale(1.2);
-    setPagesToPreload([]);
-    setProgress(null);
-    setFitMode('both');
-    setSettingsChanged(false);
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-    }
-  }, [file, onPageChange]);
-
-  // Effect to handle page change and audio caching
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
-  
-    // Set audio source if the page's audio is already cached
-    if (audioCache.current[pageNumber]) {
-      setAudioSrc(audioCache.current[pageNumber]);
-      setSettingsChanged(false);
-    } else {
-      setAudioSrc(null); // Reset audio source if no cached audio exists
-      setSettingsChanged(false);
-    }
-  }, [pageNumber]);
-
-  // Effect to preload adjacent pages for faster navigation
-  useEffect(() => {
-    if (numPages) {
-      const adjacentPages = [];
-      if (pageNumber + 1 <= numPages) adjacentPages.push(pageNumber + 1);
-      if (pageNumber - 1 >= 1) adjacentPages.push(pageNumber - 1);
-      setPagesToPreload(adjacentPages);
-    }
-  }, [pageNumber, numPages]);
-
-  // Effect to reset audio when voice, temperature, or speed changes
-  useEffect(() => {
-    if (audioSrc) {
-      setAudioSrc(null); // Reset audio source
-      setIsPlaying(false); // Stop playing
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
-      // Clear the audio cache for the current page
-      delete audioCache.current[pageNumber];
-      setSettingsChanged(true);
-    }
-  }, [selectedVoice, temperature, speed, pageNumber]);
-
-  // Effect to fit PDF to container width and/or height based on fitMode
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !pageWidth || !pageHeight) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        
-        // Subtract padding (8px on each side = 16px total)
-        const availableWidth = width - 16;
-        const availableHeight = height - 16;
-
-        let newScale: number;
-        
-        switch (fitMode) {
-          case 'width':
-            newScale = availableWidth / pageWidth;
-            break;
-          case 'height':
-            newScale = availableHeight / pageHeight;
-            break;
-          case 'both':
-            // Use the smaller scale to ensure both dimensions fit
-            const widthScale = availableWidth / pageWidth;
-            const heightScale = availableHeight / pageHeight;
-            newScale = Math.min(widthScale, heightScale);
-            break;
-          case 'none':
-            // Keep current scale
-            return;
-          default:
-            newScale = scale;
-        }
-        
-        setScale(newScale);
-      }
-    });
-
-    resizeObserver.observe(container);
-
-    return () => {
-      resizeObserver.unobserve(container);
-    };
-  }, [pageWidth, pageHeight, fitMode, scale]);
-
-  // Function to extract text from a PDF page
-  const extractTextFromPage = async (pageNum: number) => {
-    const pdf = await pdfjs.getDocument(URL.createObjectURL(file)).promise;
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const text = textContent.items.filter((item: any) => item.str).map((item: any) => item.str).join(' ');
-    return text;
-  };
-
-  // Function to fetch audio for a specific page
-  const fetchAudioForPage = async (pageNum: number) => {
-    if (audioCache.current[pageNum] && !settingsChanged) {
-      setAudioSrc(audioCache.current[pageNum]);
-      return audioCache.current[pageNum];
-    }
-  
-    try {
-      setIsAudioLoading(true);
-      setProgress(0); // Reset progress to 0%
-  
-      const text = await extractTextFromPage(pageNum);
-  
-      const options = {
-        method: 'POST',
-        headers: {
-          AUTHORIZATION: process.env.NEXT_PUBLIC_API_AUTHORIZATION || '',
-          'X-USER-ID': process.env.NEXT_PUBLIC_API_USER_ID || '',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          outputFormat: 'mp3',
-          voiceConditioningSeconds: 20,
-          voiceConditioningSeconds2: 20,
-          language: 'english',
-          model: 'PlayDialog',
-          text: text,
-          voice: selectedVoice,
-          speed: speed,
-          temperature: temperature,
-        }),
-      };
-  
-      console.log('Fetching audio for page:', pageNum);
-      console.log('Request options:', options);
-  
-      const response = await fetch('https://api.play.ai/api/v1/tts/stream', options);
-  
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-  
-      if (!response.ok) {
-        throw new Error(`Network response was not ok: ${response.statusText}`);
-      }
-  
-      const contentLength = response.headers.get('content-length');
-      const totalLength = contentLength ? parseInt(contentLength, 10) : null;
-  
-      const reader = response.body?.getReader();
-      let receivedLength = 0;
-      const chunks = [];
-  
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-  
-          if (done) {
-            break;
-          }
-  
-          chunks.push(value);
-          receivedLength += value.length;
-  
-          // Update progress if totalLength is available
-          if (totalLength) {
-            const newProgress = (receivedLength / totalLength) * 100;
-            setProgress(newProgress);
-          } else {
-            // Fallback: Increment progress by a small amount for each chunk
-            setProgress((prev) => Math.min((prev || 0) + 10, 90)); // Cap at 90% until done
-          }
-        }
-      }
-  
-      const audioBlob = new Blob(chunks);
-      const audioUrl = URL.createObjectURL(audioBlob);
-  
-      audioCache.current[pageNum] = audioUrl;
-      setAudioSrc(audioUrl);
-      setProgress(100); // Set progress to 100% when done
-      setSettingsChanged(false); // Reset settings changed flag after successful generation
-      return audioUrl;
-    } catch (error) {
-      console.error('Error generating audio:', error);
-      setProgress(null); // Reset progress on error
-      return null;
-    } finally {
-      setIsAudioLoading(false);
-    }
-  };
-
-  // Function to handle fetching audio for the current page
-  const handleFetchAudio = async () => {
-    const audioUrl = await fetchAudioForPage(pageNumber);
-    if (audioUrl && audioRef.current) {
-      audioRef.current.src = audioUrl;
-      audioRef.current.play();
-      setIsPlaying(true);
-    }
-  };
-
-  // Function to handle playing audio
-  const handlePlayAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.play();
-      setIsPlaying(true);
-    }
-  };
-
-  // Function to handle pausing audio
-  const handlePauseAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
-
-  // Function to handle page load success and set page dimensions
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handlePageLoadSuccess = (page: any) => {
-    setPageWidth(page.originalWidth);
-    setPageHeight(page.originalHeight);
-  };
-
-  // Function to handle zooming in
-  const handleZoomIn = () => {
-    setFitMode('none');
-    setScale(prev => Math.min(prev + 0.2, 3.0));
-  };
-
-  // Function to handle zooming out
-  const handleZoomOut = () => {
-    setFitMode('none');
-    setScale(prev => Math.max(prev - 0.2, 0.5));
-  };
-
-  // Function to reset zoom to fit the page
-  const handleResetZoom = () => {
-    setFitMode('both');
-  };
-
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto h-screen flex flex-col">
       {/* PDF Controls */}
@@ -547,6 +573,9 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
           </Document>
         </div>
       </div>
+
+      {/* Audio Controls */}
+      <div id="audio-controls-container" className="p-4 border-t border-gray-200"></div>
 
       {/* Hidden audio element */}
       {audioSrc && (
