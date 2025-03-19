@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'PDF Viewer',
-  description: 'A simple PDF viewer built with Next.js 15',
+  title: 'PlayAI Product Engineering Test Project',
+  description: '',
 };
 
 export default function RootLayout({

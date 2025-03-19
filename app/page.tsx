@@ -1,4 +1,3 @@
-// app/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -26,20 +25,41 @@ export default function Home() {
       <PDFInitializer />
       <div className="min-h-screen bg-gray-100">
         <main className="container mx-auto px-4 py-8">
-          
-          <PDFUploader 
-            onFileChange={handleFileChange} 
-            currentFile={file} 
-          />
-
-          {file && (
-            <PDFViewer
-              file={file}
-              pageNumber={pageNumber}
-              numPages={numPages}
-              onPageChange={setPageNumber}
-              onDocumentLoadSuccess={handleDocumentLoadSuccess}
-            />
+          {!file ? (
+            // Centered uploader when no file is loaded
+            <div className="flex justify-center items-center">
+              <div className="w-full max-w-2xl">
+                <PDFUploader 
+                  onFileChange={handleFileChange} 
+                  currentFile={file} 
+                />
+              </div>
+            </div>
+          ) : (
+            // Two-column layout when a file is loaded
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left column: Uploader and Controls */}
+              <div className="lg:col-span-1">
+                <PDFUploader 
+                  onFileChange={handleFileChange} 
+                  currentFile={file} 
+                />
+                
+                {/* This empty div will be filled by moving the controls from PDFViewer */}
+                <div id="audio-controls-container" className="bg-white rounded-lg shadow-lg mt-6"></div>
+              </div>
+              
+              {/* Right column: PDF Viewer */}
+              <div className="lg:col-span-2">
+                <PDFViewer
+                  file={file}
+                  pageNumber={pageNumber}
+                  numPages={numPages}
+                  onPageChange={setPageNumber}
+                  onDocumentLoadSuccess={handleDocumentLoadSuccess}
+                />
+              </div>
+            </div>
           )}
         </main>
       </div>

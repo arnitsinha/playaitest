@@ -42,17 +42,18 @@ const PDFUploader: React.FC<PDFUploaderProps> = ({ onFileChange, currentFile }) 
   };
 
   const handleUploadDifferentFile = () => {
-    setShowFullUploader(true);
+    // Instead of showing the full uploader, directly trigger the file input
+    fileInputRef.current?.click();
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8 mb-8 transition-all max-w-4xl mx-auto">
+    <div className="bg-white rounded-xl shadow-lg p-4 mb-8 transition-all max-w-4xl mx-auto">
       {showFullUploader ? (
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Upload PDF Document</h3>
           
           <div
-            className={`border-2 border-dashed rounded-lg p-8 transition-all ${
+            className={`border-2 border-dashed rounded-lg p-4 transition-all ${
               isDragging 
                 ? 'border-blue-500 bg-blue-50' 
                 : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'

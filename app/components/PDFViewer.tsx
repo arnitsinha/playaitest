@@ -1,11 +1,10 @@
 'use client';
 
 import { Document, Page, pdfjs } from 'react-pdf';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import PDFControls from './PDFControls';
-import AudioControls from './AudioControls';
 
 // Setup PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
@@ -90,6 +89,144 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const [progress, setProgress] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioCache = useRef<Record<number, string>>({});
+  const [pageWidth, setPageWidth] = useState<number | null>(null);
+  const [pageHeight, setPageHeight] = useState<number | null>(null);
+  const [fitMode, setFitMode] = useState<'width' | 'height' | 'both' | 'none'>('both');
+  const controlsContainerRef = useRef<HTMLDivElement | null>(null);
+  const [settingsChanged, setSettingsChanged] = useState(false);
+
+  const renderAudioControlsInContainer = useCallback(() => {
+    if (!controlsContainerRef.current) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'p-4';
+    wrapper.innerHTML = `
+      <h3 class="text-lg font-medium text-gray-800 mb-4">Audio Settings</h3>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Select Voice</label>
+        <select id="voice-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+          ${voices.map(voice => `
+            <option value="${voice.value}" ${selectedVoice === voice.value ? 'selected' : ''}>
+              ${voice.name} (${voice.gender}, ${voice.style})
+            </option>
+          `).join('')}
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Speed: ${speed}x</label>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.1"
+          value="${speed}"
+          id="speed-control"
+          class="w-full"
+        />
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Temperature: ${temperature}</label>
+        <input
+          type="range"
+          min="0"
+          max="2"
+          step="0.1"
+          value="${temperature}"
+          id="temp-control"
+          class="w-full"
+        />
+      </div>
+      
+      ${isAudioLoading && progress !== null ? `
+        <div class="mb-4">
+          <div class="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              class="bg-blue-600 h-2.5 rounded-full"
+              style="width: ${progress}%"
+            ></div>
+          </div>
+          <p class="text-sm text-gray-500 mt-2">Generating audio... ${Math.round(progress)}%</p>
+        </div>
+      ` : isAudioLoading ? `
+        <div class="flex items-center justify-center mb-4">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <p class="text-sm text-gray-500 ml-2">Generating audio...</p>
+        </div>
+      ` : ''}
+      
+      <div class="flex space-x-2">
+        ${(!audioSrc || settingsChanged) ? `
+          <button
+            id="fetch-audio-btn"
+            class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            ${isAudioLoading ? 'disabled' : ''}
+          >
+            Generate Audio
+          </button>
+        ` : ''}
+        
+        ${audioSrc ? `
+          <button
+            id="toggle-audio-btn"
+            class="${(!audioSrc || settingsChanged) ? 'flex-1' : 'w-full'} bg-gray-100 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+          >
+            ${isPlaying ? 'Pause' : 'Play'}
+          </button>
+        ` : ''}
+      </div>
+    `;
+
+    controlsContainerRef.current.innerHTML = '';
+    controlsContainerRef.current.appendChild(wrapper);
+
+    document.getElementById('voice-select')?.addEventListener('change', (e) => {
+      // @ts-expect-error - Event target value is guaranteed to be a string
+      setSelectedVoice(e.target.value);
+      setSettingsChanged(true);
+    });
+    
+    document.getElementById('speed-control')?.addEventListener('input', (e) => {
+      // @ts-expect-error - Event target value is guaranteed to be a string
+      setSpeed(parseFloat(e.target.value));
+      setSettingsChanged(true);
+    });
+    
+    document.getElementById('temp-control')?.addEventListener('input', (e) => {
+      // @ts-expect-error - Event target value is guaranteed to be a string
+      setTemperature(parseFloat(e.target.value));
+      setSettingsChanged(true);
+    });
+
+    document.getElementById('fetch-audio-btn')?.addEventListener('click', handleFetchAudio);
+
+    document.getElementById('toggle-audio-btn')?.addEventListener('click', () => {
+      if (isPlaying) {
+        handlePauseAudio();
+      } else {
+        handlePlayAudio();
+      }
+    });
+  }, [selectedVoice, speed, temperature, audioSrc, isPlaying, isAudioLoading, progress, settingsChanged]);
+
+  useEffect(() => {
+    const controlsContainer = document.getElementById('audio-controls-container');
+    if (controlsContainer) {
+      controlsContainerRef.current = controlsContainer as HTMLDivElement;
+      renderAudioControlsInContainer();
+    }
+
+    return () => {
+      if (controlsContainerRef.current) {
+        controlsContainerRef.current.innerHTML = '';
+      }
+    };
+  }, [renderAudioControlsInContainer]);
+
+  useEffect(() => {
+    renderAudioControlsInContainer();
+  }, [renderAudioControlsInContainer]);
 
   // Reset all parameters when a new file is loaded
   useEffect(() => {
@@ -101,6 +238,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     setScale(1.2);
     setPagesToPreload([]);
     setProgress(null);
+    setFitMode('both');
+    setSettingsChanged(false);
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -117,10 +256,12 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     // Set audio source if the page's audio is already cached
     if (audioCache.current[pageNumber]) {
       setAudioSrc(audioCache.current[pageNumber]);
+      setSettingsChanged(false);
     } else {
       setAudioSrc(null); // Reset audio source if no cached audio exists
+      setSettingsChanged(false);
     }
-  }, [pageNumber, audioSrc]);
+  }, [pageNumber]);
 
   useEffect(() => {
     if (numPages) {
@@ -142,8 +283,55 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       }
       // Clear the audio cache for the current page
       delete audioCache.current[pageNumber];
+      setSettingsChanged(true);
     }
   }, [selectedVoice, temperature, speed, pageNumber]);
+
+  // Fit PDF to container width and/or height based on fitMode
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pageWidth || !pageHeight) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        
+        // Subtract padding (8px on each side = 16px total)
+        const availableWidth = width - 16;
+        const availableHeight = height - 16;
+
+        let newScale: number;
+        
+        switch (fitMode) {
+          case 'width':
+            newScale = availableWidth / pageWidth;
+            break;
+          case 'height':
+            newScale = availableHeight / pageHeight;
+            break;
+          case 'both':
+            // Use the smaller scale to ensure both dimensions fit
+            const widthScale = availableWidth / pageWidth;
+            const heightScale = availableHeight / pageHeight;
+            newScale = Math.min(widthScale, heightScale);
+            break;
+          case 'none':
+            // Keep current scale
+            return;
+          default:
+            newScale = scale;
+        }
+        
+        setScale(newScale);
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.unobserve(container);
+    };
+  }, [pageWidth, pageHeight, fitMode, scale]);
 
   const extractTextFromPage = async (pageNum: number) => {
     const pdf = await pdfjs.getDocument(URL.createObjectURL(file)).promise;
@@ -155,7 +343,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   };
 
   const fetchAudioForPage = async (pageNum: number) => {
-    if (audioCache.current[pageNum]) {
+    if (audioCache.current[pageNum] && !settingsChanged) {
       setAudioSrc(audioCache.current[pageNum]);
       return audioCache.current[pageNum];
     }
@@ -186,13 +374,11 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
         }),
       };
   
-      // Log the request details for debugging
       console.log('Fetching audio for page:', pageNum);
       console.log('Request options:', options);
   
       const response = await fetch('https://api.play.ai/api/v1/tts/stream', options);
   
-      // Log the response status and headers
       console.log('Response status:', response.status);
       console.log('Response headers:', response.headers);
   
@@ -235,6 +421,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       audioCache.current[pageNum] = audioUrl;
       setAudioSrc(audioUrl);
       setProgress(100); // Set progress to 100% when done
+      setSettingsChanged(false); // Reset settings changed flag after successful generation
       return audioUrl;
     } catch (error) {
       console.error('Error generating audio:', error);
@@ -268,87 +455,44 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlePageLoadSuccess = (page: any) => {
+    setPageWidth(page.originalWidth);
+    setPageHeight(page.originalHeight);
+  };
+
+  // Enhanced zoom controls with fit options
+  const handleZoomIn = () => {
+    setFitMode('none');
+    setScale(prev => Math.min(prev + 0.2, 3.0));
+  };
+
+  const handleZoomOut = () => {
+    setFitMode('none');
+    setScale(prev => Math.max(prev - 0.2, 0.5));
+  };
+
+  const handleResetZoom = () => {
+    setFitMode('both');
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto">
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto h-screen flex flex-col">
+      {/* PDF Controls */}
       <PDFControls
         pageNumber={pageNumber}
         numPages={numPages}
         onPageChange={onPageChange}
         scale={scale}
-        onZoomIn={() => setScale(prev => Math.min(prev + 0.2, 2.4))}
-        onZoomOut={() => setScale(prev => Math.max(prev - 0.2, 0.6))}
-        onResetZoom={() => setScale(1.2)}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
       />
 
-      {/* Voice Selection Dropdown */}
-      <div className="p-4 border-b">
-        <label className="block text-sm font-medium text-gray-700">Select Voice</label>
-        <select
-          value={selectedVoice}
-          onChange={(e) => setSelectedVoice(e.target.value)}
-          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-        >
-          {voices.map((voice) => (
-            <option key={voice.value} value={voice.value}>
-              {voice.name} ({voice.gender}, {voice.style})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Speed and Temperature Controls */}
-      <div className="p-4 border-b">
-        <label className="block text-sm font-medium text-gray-700">Speed</label>
-        <input
-          type="range"
-          min="0.5"
-          max="2"
-          step="0.1"
-          value={speed}
-          onChange={(e) => setSpeed(parseFloat(e.target.value))}
-          className="w-full"
-        />
-        <span className="text-sm text-gray-500">{speed}x</span>
-
-        <label className="block mt-4 text-sm font-medium text-gray-700">Temperature</label>
-        <input
-          type="range"
-          min="0"
-          max="2"
-          step="0.1"
-          value={temperature}
-          onChange={(e) => setTemperature(parseFloat(e.target.value))}
-          className="w-full"
-        />
-        <span className="text-sm text-gray-500">{temperature}</span>
-      </div>
-
-      {/* Progress Indicator */}
-      {isAudioLoading && (
-        <div className="p-4">
-          {progress !== null ? (
-            <>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className="bg-blue-600 h-2.5 rounded-full"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-              <p className="text-sm text-gray-500 mt-2">Generating audio... {Math.round(progress)}%</p>
-            </>
-          ) : (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              <p className="text-sm text-gray-500 ml-2">Generating audio...</p>
-            </div>
-          )}
-        </div>
-      )}
-
+      {/* PDF Container */}
       <div
         ref={containerRef}
-        className="relative flex justify-center p-4 bg-gray-100 min-h-96 overflow-auto"
-        style={{ minHeight: '600px' }}
+        className="relative flex justify-center p-4 bg-gray-100 overflow-auto flex-grow"
       >
         <div>
           <Document
@@ -374,6 +518,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
               renderAnnotationLayer={true}
               scale={scale}
               className="shadow-lg"
+              onLoadSuccess={handlePageLoadSuccess}
             />
 
             <div className="hidden">
@@ -391,15 +536,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
         </div>
       </div>
 
-      {/* Audio Controls */}
-      <AudioControls
-        audioSrc={audioSrc}
-        isPlaying={isPlaying}
-        isAudioLoading={isAudioLoading}
-        onFetchAudio={handleFetchAudio}
-        onPlayAudio={handlePlayAudio}
-        onPauseAudio={handlePauseAudio}
-      />
+      {/* Hidden audio element */}
       {audioSrc && (
         <audio ref={audioRef} src={audioSrc} controls className="hidden" />
       )}
